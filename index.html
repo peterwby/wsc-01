@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>条形码价格扫描器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .video-container {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        #video {
+            width: 100%;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+        }
+        .result-container {
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .barcode-result {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .product-info {
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .price {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .search-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .search-button {
+            padding: 8px 15px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .search-button:hover {
+            opacity: 0.9;
+        }
+        .search-button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        #google-search {
+            background-color: #4285F4;
+        }
+        #baidu-search {
+            background-color: #2932E1;
+        }
+    </style>
+</head>
+<body>
+    <h1>条形码价格扫描器</h1>
+    
+    <div class="video-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div class="result-container">
+        <div class="barcode-result">
+            条形码: <span id="barcode">等待扫描...</span>
+        </div>
+        <div class="product-info">
+            商品名称: <span id="product-name">-</span><br>
+            价格: <span id="price" class="price">-</span>
+        </div>
+        <div class="search-buttons">
+            <a id="google-search" class="search-button" href="#" target="_blank" style="display: none;">Google 搜索</a>
+            <a id="baidu-search" class="search-button" href="#" target="_blank" style="display: none;">百度搜索</a>
+        </div>
+    </div>
+
+    <!-- 引入zxing-js库 -->
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <!-- 引入我们的主脚本 -->
+    <script src="script.js"></script>
+</body>
+</html> 

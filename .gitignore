@@ -1,0 +1,38 @@
+
+*.log
+.DS_Store
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Node modules
+node_modules
+
+# Adonis directory for storing tmp files
+tmp
+
+# Environment variables, never commit this file
+.env
+
+# The development sqlite file
+database/development.sqlite
+
+# VSCode & Webstorm history directories
+.history
+.history/*
+.idea
+.cursorrules
+.nyc_output
+
+public/upload/images/*
+coverage
+
