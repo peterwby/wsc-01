@@ -22,6 +22,10 @@ tmp
 # Environment variables, never commit this file
 .env
 .env*.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # The development sqlite file
 database/development.sqlite
@@ -36,3 +40,20 @@ database/development.sqlite
 public/upload/images/*
 coverage
 
+.vercel
+
+# dependencies
+node_modules/
+
+# env files
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# misc
+.DS_Store
+*.pem
+.vercel

@@ -4,36 +4,111 @@ const barcodeResult = document.getElementById('barcode');
 const productName = document.getElementById('product-name');
 const manualBarcode = document.getElementById('manual-barcode');
 const manualSearchButton = document.getElementById('manual-search-button');
+const rescanButton = document.getElementById('rescan-button');
 
 // 初始化ZXing解码器
 const codeReader = new ZXing.BrowserMultiFormatReader();
 
-// --- 新增：提取核心 API 调用和结果处理逻辑 --- 
-async function searchAndDisplayProductInfo(barcode) {
+// 跟踪视频流和解码控制
+let currentVideoStream = null;
+let isDecodingActive = false;
+
+// 防抖函数：确保在指定时间内只执行一次
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 添加标志位，跟踪当前是否正在进行 API 调用
+let isSearching = false;
+let lastScannedCode = null;
+let isScanning = false;
+let scanningStatusInterval = null;
+
+// 更新扫描状态显示
+function updateScanningStatus() {
+    if (!isSearching && !lastScannedCode && isDecodingActive) {
+        const dots = '.'.repeat((Date.now() / 500) % 4);
+        barcodeResult.textContent = `识别中${dots}`;
+        productName.innerHTML = '请将条码/二维码对准摄像头';
+    }
+}
+
+// 开始显示扫描状态
+function startScanningStatus() {
+    isScanning = true;
+    updateScanningStatus();
+    scanningStatusInterval = setInterval(updateScanningStatus, 500);
+}
+
+// 停止显示扫描状态
+function stopScanningStatus() {
+    isScanning = false;
+    if (scanningStatusInterval) {
+        clearInterval(scanningStatusInterval);
+        scanningStatusInterval = null;
+    }
+}
+
+// 停止视频流和解码
+async function stopScanning() {
+    isDecodingActive = false;
+    stopScanningStatus();
+    
+    try {
+        await codeReader.reset();
+        if (currentVideoStream) {
+            currentVideoStream.getTracks().forEach(track => track.stop());
+            currentVideoStream = null;
+        }
+        video.srcObject = null;
+    } catch (error) {
+        console.error('停止扫描时出错:', error);
+    }
+}
+
+// 使用防抖包装 searchAndDisplayProductInfo 函数
+const debouncedSearch = debounce(async (barcode) => {
+    if (isSearching) {
+        console.log('已有搜索正在进行中，跳过此次请求');
+        return;
+    }
+
     if (!barcode || barcode.trim() === '') {
         alert('请输入或扫描有效的条形码。');
         return;
     }
 
-    // 更新显示的条形码
-    barcodeResult.textContent = barcode;
-    // 清空之前的结果并显示查询状态
-    productName.innerHTML = '查询中...';
-
-    // 构建指向后端代理的请求URL (使用相对路径)
-    const backendApiUrl = `/api/search?barcode=${barcode}`;
-
     try {
+        stopScanningStatus();
+        isSearching = true;
+        lastScannedCode = barcode;
+        barcodeResult.textContent = barcode;
+        productName.innerHTML = '查询中...';
+
+        // 扫描成功后停止解码
+        if (isDecodingActive) {
+            await stopScanning();
+            rescanButton.disabled = false; // 启用重新扫描按钮
+        }
+
+        const backendApiUrl = `/api/search?barcode=${barcode}`;
         const response = await fetch(backendApiUrl);
+        
         if (!response.ok) {
-            // 如果后端返回错误状态
             const errData = await response.json();
             throw new Error(`后端错误: ${response.status} - ${errData.error || '未知错误'}`);
         }
+        
         const data = await response.json();
-        console.log('后端代理响应 (来自 SerpAPI):', data);
 
-        // --- SerpAPI 响应解析逻辑 (保持不变) ---
         let productInfo = '未找到商品信息';
         if (data.error) {
             productInfo = `查询失败: ${data.error}`;
@@ -72,63 +147,86 @@ async function searchAndDisplayProductInfo(barcode) {
             if (kg.description) {
                 productInfo += ` - ${kg.description}`;
             }
-        } 
-        // --- 逻辑结束 ---
+        }
         productName.innerHTML = productInfo;
 
     } catch (error) {
         console.error('查询或处理失败:', error);
         productName.textContent = `查询失败 (${error.message || '网络或服务器错误'})`;
+    } finally {
+        isSearching = false;
     }
-}
-// --- 新函数结束 ---
+}, 1000);
 
 // 启动摄像头和扫描
 async function startScanning() {
     try {
-        // 请求摄像头权限
+        // 如果已经在扫描，先停止
+        if (isDecodingActive) {
+            await stopScanning();
+        }
+
+        isDecodingActive = true;
+        lastScannedCode = null; // 重置上次扫描的结果
+        rescanButton.disabled = true; // 禁用重新扫描按钮
+
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" } // 优先使用后置摄像头
+            video: { facingMode: "environment" }
         });
 
-        // 显示视频流
+        currentVideoStream = stream;
         video.srcObject = stream;
         await video.play();
 
-        // 开始解码
+        startScanningStatus();
+
         codeReader.decodeFromVideoDevice(null, video, (result, err) => {
+            if (!isDecodingActive) return; // 如果解码已停止，不处理结果
+
             if (result) {
-                // 成功解码，调用新的处理函数
-                searchAndDisplayProductInfo(result.text);
+                debouncedSearch(result.text);
             }
-            // 处理ZXing自身的解码错误
+            
             if (err && !(err instanceof ZXing.NotFoundException)) {
                 console.error('扫描错误:', err);
+                stopScanningStatus();
+                barcodeResult.textContent = '扫描出错';
+                productName.textContent = '请重试';
+                rescanButton.disabled = false;
             }
         });
 
     } catch (error) {
-        // 处理摄像头访问错误
         console.error('摄像头访问错误:', error);
         alert('无法访问摄像头，请确保已授予摄像头权限。\n错误: ' + error.message);
-        // 更新界面显示错误状态
         productName.textContent = '摄像头错误';
         barcodeResult.textContent = '错误';
+        rescanButton.disabled = false;
     }
 }
 
-// --- 新增：为手动搜索按钮添加事件监听 --- 
+// 为手动搜索按钮添加事件监听
 manualSearchButton.addEventListener('click', () => {
-    const barcodeValue = manualBarcode.value;
-    searchAndDisplayProductInfo(barcodeValue);
+    stopScanningStatus();
+    debouncedSearch(manualBarcode.value);
 });
 
-// --- 新增：允许在输入框按回车键触发搜索 --- 
+// 为重新扫描按钮添加事件监听
+rescanButton.addEventListener('click', () => {
+    startScanning();
+});
+
+// 允许在输入框按回车键触发搜索
 manualBarcode.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') {
-        event.preventDefault(); // 阻止默认的回车行为（如表单提交）
-        manualSearchButton.click(); // 模拟点击搜索按钮
+        event.preventDefault();
+        manualSearchButton.click();
     }
+});
+
+// 清理函数
+window.addEventListener('beforeunload', () => {
+    stopScanning();
 });
 
 // 页面加载完成后开始扫描
