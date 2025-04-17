@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>条形码价格扫描器</title>
+    <title>条形码信息查询</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -33,10 +33,6 @@
         .product-info {
             font-size: 16px;
             margin-bottom: 15px;
-        }
-        .price {
-            color: #e74c3c;
-            font-weight: bold;
         }
         .search-buttons {
             display: flex;
@@ -69,10 +65,15 @@
     </style>
 </head>
 <body>
-    <h1>条形码价格扫描器</h1>
+    <h1>条形码信息查询</h1>
     
     <div class="video-container">
         <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div class="manual-input-container" style="margin-bottom: 20px; display: flex; gap: 10px;">
+        <input type="text" id="manual-barcode" placeholder="手动输入条形码" style="flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <button id="manual-search-button" style="padding: 8px 15px; background-color: #2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer;">查询</button>
     </div>
 
     <div class="result-container">
@@ -80,12 +81,7 @@
             条形码: <span id="barcode">等待扫描...</span>
         </div>
         <div class="product-info">
-            商品名称: <span id="product-name">-</span><br>
-            价格: <span id="price" class="price">-</span>
-        </div>
-        <div class="search-buttons">
-            <a id="google-search" class="search-button" href="#" target="_blank" style="display: none;">Google 搜索</a>
-            <a id="baidu-search" class="search-button" href="#" target="_blank" style="display: none;">百度搜索</a>
+            商品信息: <span id="product-name">-</span>
         </div>
     </div>
 
