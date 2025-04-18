@@ -117,12 +117,13 @@ async function getBestVideoConstraints() {
     const isMobile = isMobileDevice();
     
     if (isMobile) {
-        // 移动设备优先使用后置摄像头，简化配置
+        // 移动设备优先使用后置摄像头，设置适中的分辨率
         return {
             facingMode: { exact: "environment" }, // 强制使用后置摄像头
             width: { min: 640, ideal: 1280, max: 1920 },
             height: { min: 480, ideal: 720, max: 1080 },
-            frameRate: { ideal: 30 }
+            frameRate: { ideal: 30 },
+            focusMode: { ideal: "continuous" } // 启用持续自动对焦
         };
     } else {
         // PC设备使用默认配置
@@ -150,13 +151,25 @@ async function configureAutoFocus(stream) {
     // 检查是否支持自动对焦
     if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
         try {
+            // 先尝试使用高级配置
             await track.applyConstraints({
                 advanced: [{ focusMode: 'continuous' }]
             });
-            console.log('已启用持续自动对焦');
+            console.log('已启用持续自动对焦（高级模式）');
         } catch (error) {
-            console.warn('无法启用自动对焦:', error);
+            console.warn('高级自动对焦失败，尝试基本模式:', error);
+            try {
+                // 如果高级配置失败，尝试基本配置
+                await track.applyConstraints({
+                    focusMode: 'continuous'
+                });
+                console.log('已启用持续自动对焦（基本模式）');
+            } catch (error) {
+                console.warn('无法启用自动对焦:', error);
+            }
         }
+    } else {
+        console.warn('当前设备不支持持续自动对焦');
     }
 }
 
@@ -174,6 +187,8 @@ async function startScanning() {
 
         // 获取设备特定的视频配置
         const videoConstraints = await getBestVideoConstraints();
+        console.log('视频配置:', videoConstraints);
+        
         const stream = await navigator.mediaDevices.getUserMedia({
             video: videoConstraints
         });
@@ -185,6 +200,14 @@ async function startScanning() {
         currentVideoStream = stream;
         video.srcObject = stream;
         await video.play();
+
+        // 等待视频元数据加载完成
+        await new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+                console.log(`视频分辨率: ${video.videoWidth}x${video.videoHeight}`);
+                resolve();
+            };
+        });
 
         startScanningStatus();
 
