@@ -5,6 +5,44 @@ const productName = document.getElementById('product-name');
 const manualBarcode = document.getElementById('manual-barcode');
 const manualSearchButton = document.getElementById('manual-search-button');
 const rescanButton = document.getElementById('rescan-button');
+const scanOverlay = document.querySelector('.scan-overlay');
+
+// 检查是否为移动设备
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+// 播放扫描成功提示音
+function playBeepSound() {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(1500, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (error) {
+        console.warn('无法播放提示音:', error);
+    }
+}
+
+// 触发振动反馈
+function vibrateDevice() {
+    if (navigator.vibrate) {
+        try {
+            navigator.vibrate(100);
+        } catch (error) {
+            console.warn('无法触发振动:', error);
+        }
+    }
+}
 
 // 初始化ZXing解码器
 const codeReader = new ZXing.BrowserMultiFormatReader();
@@ -37,7 +75,7 @@ function updateScanningStatus() {
     if (!isSearching && !lastScannedCode && isDecodingActive) {
         const dots = '.'.repeat((Date.now() / 500) % 4);
         barcodeResult.textContent = `识别中${dots}`;
-        productName.innerHTML = '请将条码/二维码对准摄像头';
+        productName.innerHTML = '请将条码对准中间扫描框<br>保持15-20厘米的距离';
     }
 }
 
@@ -93,10 +131,11 @@ const debouncedSearch = debounce(async (barcode) => {
         barcodeResult.textContent = barcode;
         productName.innerHTML = '查询中...';
 
-        // 扫描成功后停止解码
+        // 扫描成功后停止解码并隐藏扫描指示区域
         if (isDecodingActive) {
             await stopScanning();
             rescanButton.disabled = false; // 启用重新扫描按钮
+            scanOverlay.style.display = 'none'; // 隐藏扫描指示区域
         }
 
         const backendApiUrl = `/api/search?barcode=${barcode}`;
@@ -156,7 +195,7 @@ const debouncedSearch = debounce(async (barcode) => {
     } finally {
         isSearching = false;
     }
-}, 1000);
+}, 500); // 防抖时间改为500ms
 
 // 启动摄像头和扫描
 async function startScanning() {
@@ -169,13 +208,32 @@ async function startScanning() {
         isDecodingActive = true;
         lastScannedCode = null; // 重置上次扫描的结果
         rescanButton.disabled = true; // 禁用重新扫描按钮
+        scanOverlay.style.display = 'block'; // 显示扫描指示区域
+
+        // 根据设备类型设置视频配置
+        const videoConstraints = isMobileDevice() ? {
+            facingMode: { exact: "environment" }, // 移动设备强制使用后置摄像头
+            width: { min: 640, ideal: 1080, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
+            frameRate: { ideal: 30 }
+        } : {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+        };
 
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }
+            video: videoConstraints
         });
 
         currentVideoStream = stream;
         video.srcObject = stream;
+        
+        // 移动设备镜像显示
+        if (isMobileDevice()) {
+            video.style.transform = 'scaleX(-1)';
+        }
+        
         await video.play();
 
         startScanningStatus();
@@ -184,6 +242,11 @@ async function startScanning() {
             if (!isDecodingActive) return; // 如果解码已停止，不处理结果
 
             if (result) {
+                // 添加振动和声音反馈
+                if (isMobileDevice()) {
+                    vibrateDevice();
+                    playBeepSound();
+                }
                 debouncedSearch(result.text);
             }
             
@@ -193,15 +256,25 @@ async function startScanning() {
                 barcodeResult.textContent = '扫描出错';
                 productName.textContent = '请重试';
                 rescanButton.disabled = false;
+                scanOverlay.style.display = 'none'; // 发生错误时也隐藏扫描指示区域
             }
         });
 
     } catch (error) {
         console.error('摄像头访问错误:', error);
-        alert('无法访问摄像头，请确保已授予摄像头权限。\n错误: ' + error.message);
+        if (error.name === 'NotAllowedError') {
+            alert('请允许访问摄像头权限以进行扫码。');
+        } else if (error.name === 'NotFoundError') {
+            alert('未找到可用的摄像头设备。');
+        } else if (error.name === 'NotReadableError') {
+            alert('摄像头可能被其他应用占用，请关闭其他应用后重试。');
+        } else {
+            alert('摄像头出现错误：' + error.message);
+        }
         productName.textContent = '摄像头错误';
         barcodeResult.textContent = '错误';
         rescanButton.disabled = false;
+        scanOverlay.style.display = 'none'; // 发生错误时也隐藏扫描指示区域
     }
 }
 

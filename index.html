@@ -44,12 +44,13 @@
         }
 
         .video-container {
-            background-color: var(--card-background);
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            margin-bottom: var(--spacing);
             position: relative;
+            width: 100%;
+            background: #000;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+            border-radius: var(--border-radius);
+            margin-bottom: var(--spacing);
         }
 
         #video {
@@ -66,9 +67,77 @@
             left: 0;
             right: 0;
             bottom: 0;
-            border: 2px solid var(--primary-color);
-            border-radius: var(--border-radius);
             pointer-events: none;
+        }
+
+        .scan-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70vw;
+            max-width: 300px;
+            height: 25vh;
+            max-height: 150px;
+            border: 2px solid rgba(0, 122, 255, 0.8);
+            border-radius: 12px;
+            box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.6);
+        }
+
+        .scan-area::before,
+        .scan-area::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary-color);
+        }
+
+        .scan-area::before {
+            top: -2px;
+            left: -2px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .scan-area::after {
+            bottom: -2px;
+            right: -2px;
+            border-left: none;
+            border-top: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary-color);
+            animation: scan 2s linear infinite;
+        }
+
+        @keyframes scan {
+            0% {
+                top: 0;
+            }
+            50% {
+                top: calc(100% - 2px);
+            }
+            100% {
+                top: 0;
+            }
+        }
+
+        .scan-tips {
+            position: absolute;
+            bottom: 20%;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: #fff;
+            font-size: 14px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
 
         .button-container {
@@ -206,7 +275,15 @@
     
     <div class="video-container">
         <video id="video" autoplay playsinline></video>
-        <div class="scan-overlay"></div>
+        <div class="scan-overlay">
+            <div class="scan-area">
+                <div class="scan-line"></div>
+            </div>
+            <div class="scan-tips">
+                请将条码对准扫描框<br>
+                保持15-20厘米的距离
+            </div>
+        </div>
     </div>
 
     <div class="button-container">
