@@ -112,135 +112,209 @@ async function stopScanning() {
     }
 }
 
-// 使用防抖包装 searchAndDisplayProductInfo 函数
-const debouncedSearch = debounce(async (barcode) => {
-    if (isSearching) {
-        console.log('已有搜索正在进行中，跳过此次请求');
-        return;
+// 获取设备最佳摄像头配置
+async function getBestVideoConstraints() {
+    const isMobile = isMobileDevice();
+    
+    if (isMobile) {
+        // 移动设备优先使用后置摄像头，设置适中的分辨率
+        return {
+            facingMode: { exact: "environment" }, // 强制使用后置摄像头
+            width: { min: 640, ideal: 1080, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
+            frameRate: { ideal: 30 },
+            focusMode: { ideal: "continuous" }, // 持续自动对焦
+            exposureMode: { ideal: "continuous" }, // 持续自动曝光
+            whiteBalanceMode: { ideal: "continuous" } // 持续自动白平衡
+        };
+    } else {
+        // PC设备使用默认配置
+        return {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+        };
     }
+}
 
-    if (!barcode || barcode.trim() === '') {
-        alert('请输入或扫描有效的条形码。');
-        return;
+// 获取支持的摄像头能力
+async function getSupportedConstraints(stream) {
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities();
+    console.log('摄像头支持的能力:', capabilities);
+    return capabilities;
+}
+
+// 配置摄像头自动对焦
+async function configureAutoFocus(stream) {
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities();
+    const settings = track.getSettings();
+    
+    // 检查是否支持自动对焦
+    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+        try {
+            await track.applyConstraints({
+                advanced: [{ focusMode: 'continuous' }]
+            });
+            console.log('已启用持续自动对焦');
+        } catch (error) {
+            console.warn('无法启用自动对焦:', error);
+        }
     }
-
-    try {
-        stopScanningStatus();
-        isSearching = true;
-        lastScannedCode = barcode;
-        barcodeResult.textContent = barcode;
-        productName.innerHTML = '查询中...';
-
-        // 扫描成功后停止解码并隐藏扫描指示区域
-        if (isDecodingActive) {
-            await stopScanning();
-            rescanButton.disabled = false; // 启用重新扫描按钮
-            scanOverlay.style.display = 'none'; // 隐藏扫描指示区域
+    
+    // 检查是否支持自动曝光
+    if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+        try {
+            await track.applyConstraints({
+                advanced: [{ exposureMode: 'continuous' }]
+            });
+            console.log('已启用持续自动曝光');
+        } catch (error) {
+            console.warn('无法启用自动曝光:', error);
         }
-
-        const backendApiUrl = `/api/search?barcode=${barcode}`;
-        const response = await fetch(backendApiUrl);
-        
-        if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(`后端错误: ${response.status} - ${errData.error || '未知错误'}`);
-        }
-        
-        const data = await response.json();
-
-        let productInfo = '未找到商品信息';
-        if (data.error) {
-            productInfo = `查询失败: ${data.error}`;
-            console.error('SerpAPI 返回错误:', data.error);
-        } else if (data.organic_results && data.organic_results.length > 0) {
-            const firstResult = data.organic_results[0];
-            let title = '';
-            let attributesHTML = '';
-            if (firstResult.title) {
-                title = `<strong>${firstResult.title}</strong>`;
-            }
-            if (firstResult.snippet) {
-                const attributes = firstResult.snippet
-                    .split(/\s+|；|，/)
-                    .map(attr => attr.trim())
-                    .filter(attr => attr.length > 0 && attr !== '属性.' && attr !== '...');
-                if (attributes.length > 0) {
-                    attributesHTML = '<ul>' + attributes.map(attr => `<li>${attr}</li>`).join('') + '</ul>';
-                } else {
-                    attributesHTML = `<p><small>${firstResult.snippet}</small></p>`;
-                }
-                if (!title && attributes.length > 0) {
-                    title = `<strong>${attributes[0]}</strong>`;
-                    attributesHTML = '<ul>' + attributes.slice(1).map(attr => `<li>${attr}</li>`).join('') + '</ul>';
-                    if (attributes.length === 1) attributesHTML = '';
-                }
-            }
-            if (title || attributesHTML) {
-                productInfo = title + attributesHTML;
-            } else {
-                productInfo = '未能提取有效商品信息';
-            }
-        } else if (data.knowledge_graph && data.knowledge_graph.title && data.knowledge_graph.entity_type !== 'related_questions') {
-            const kg = data.knowledge_graph;
-            productInfo = kg.title;
-            if (kg.description) {
-                productInfo += ` - ${kg.description}`;
-            }
-        }
-        productName.innerHTML = productInfo;
-
-    } catch (error) {
-        console.error('查询或处理失败:', error);
-        productName.textContent = `查询失败 (${error.message || '网络或服务器错误'})`;
-    } finally {
-        isSearching = false;
     }
-}, 500); // 防抖时间改为500ms
+}
 
 // 启动摄像头和扫描
 async function startScanning() {
     try {
-        // 如果已经在扫描，先停止
         if (isDecodingActive) {
             await stopScanning();
         }
 
         isDecodingActive = true;
-        lastScannedCode = null; // 重置上次扫描的结果
-        rescanButton.disabled = true; // 禁用重新扫描按钮
-        scanOverlay.style.display = 'block'; // 显示扫描指示区域
+        lastScannedCode = null;
+        rescanButton.disabled = true;
+        scanOverlay.style.display = 'block';
 
-        // 根据设备类型设置视频配置
-        const videoConstraints = isMobileDevice() ? {
-            facingMode: { exact: "environment" }, // 移动设备强制使用后置摄像头
-            width: { min: 640, ideal: 1080, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
-            frameRate: { ideal: 30 }
-        } : {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
-        };
-
+        // 获取设备特定的视频配置
+        const videoConstraints = await getBestVideoConstraints();
         const stream = await navigator.mediaDevices.getUserMedia({
             video: videoConstraints
         });
 
+        // 配置自动对焦
+        await configureAutoFocus(stream);
+        
+        // 获取并打印摄像头能力（用于调试）
+        const capabilities = await getSupportedConstraints(stream);
+        
+        // 配置视频元素
         currentVideoStream = stream;
         video.srcObject = stream;
-        
-        // 移除之前的镜像设置
-        video.style.transform = '';
-        
         await video.play();
+
+        // 等待视频元数据加载完成
+        await new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+                console.log(`视频分辨率: ${video.videoWidth}x${video.videoHeight}`);
+                resolve();
+            };
+        });
 
         startScanningStatus();
 
+        // 配置 ZXing
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.EAN_13,
+            ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.CODE_128
+        ]);
+        
+        // 使用更短的防抖时间
+        const debouncedSearch = debounce(async (barcode) => {
+            if (isSearching) {
+                console.log('已有搜索正在进行中，跳过此次请求');
+                return;
+            }
+
+            if (!barcode || barcode.trim() === '') {
+                alert('请输入或扫描有效的条形码。');
+                return;
+            }
+
+            try {
+                stopScanningStatus();
+                isSearching = true;
+                lastScannedCode = barcode;
+                barcodeResult.textContent = barcode;
+                productName.innerHTML = '查询中...';
+
+                // 扫描成功后停止解码并隐藏扫描指示区域
+                if (isDecodingActive) {
+                    await stopScanning();
+                    rescanButton.disabled = false; // 启用重新扫描按钮
+                    scanOverlay.style.display = 'none'; // 隐藏扫描指示区域
+                }
+
+                const backendApiUrl = `/api/search?barcode=${barcode}`;
+                const response = await fetch(backendApiUrl);
+                
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(`后端错误: ${response.status} - ${errData.error || '未知错误'}`);
+                }
+                
+                const data = await response.json();
+
+                let productInfo = '未找到商品信息';
+                if (data.error) {
+                    productInfo = `查询失败: ${data.error}`;
+                    console.error('SerpAPI 返回错误:', data.error);
+                } else if (data.organic_results && data.organic_results.length > 0) {
+                    const firstResult = data.organic_results[0];
+                    let title = '';
+                    let attributesHTML = '';
+                    if (firstResult.title) {
+                        title = `<strong>${firstResult.title}</strong>`;
+                    }
+                    if (firstResult.snippet) {
+                        const attributes = firstResult.snippet
+                            .split(/\s+|；|，/)
+                            .map(attr => attr.trim())
+                            .filter(attr => attr.length > 0 && attr !== '属性.' && attr !== '...');
+                        if (attributes.length > 0) {
+                            attributesHTML = '<ul>' + attributes.map(attr => `<li>${attr}</li>`).join('') + '</ul>';
+                        } else {
+                            attributesHTML = `<p><small>${firstResult.snippet}</small></p>`;
+                        }
+                        if (!title && attributes.length > 0) {
+                            title = `<strong>${attributes[0]}</strong>`;
+                            attributesHTML = '<ul>' + attributes.slice(1).map(attr => `<li>${attr}</li>`).join('') + '</ul>';
+                            if (attributes.length === 1) attributesHTML = '';
+                        }
+                    }
+                    if (title || attributesHTML) {
+                        productInfo = title + attributesHTML;
+                    } else {
+                        productInfo = '未能提取有效商品信息';
+                    }
+                } else if (data.knowledge_graph && data.knowledge_graph.title && data.knowledge_graph.entity_type !== 'related_questions') {
+                    const kg = data.knowledge_graph;
+                    productInfo = kg.title;
+                    if (kg.description) {
+                        productInfo += ` - ${kg.description}`;
+                    }
+                }
+                productName.innerHTML = productInfo;
+
+            } catch (error) {
+                console.error('查询或处理失败:', error);
+                productName.textContent = `查询失败 (${error.message || '网络或服务器错误'})`;
+            } finally {
+                isSearching = false;
+            }
+        }, 300); // 移动设备使用更短的防抖时间
+
+        // 开始解码
         codeReader.decodeFromVideoDevice(null, video, (result, err) => {
-            if (!isDecodingActive) return; // 如果解码已停止，不处理结果
+            if (!isDecodingActive) return;
 
             if (result) {
-                // 添加振动和声音反馈
+                // 播放成功提示音（仅移动设备）
                 if (isMobileDevice()) {
                     vibrateDevice();
                     playBeepSound();
