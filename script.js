@@ -148,6 +148,11 @@ async function tryEnableAutoFocus(stream) {
     }
 }
 
+// 校验条形码格式（8-14位纯数字）
+function isValidBarcode(barcode) {
+    return /^[0-9]{8,14}$/.test(barcode);
+}
+
 // 启动摄像头和扫描
 async function startScanning() {
     try {
@@ -191,6 +196,11 @@ async function startScanning() {
 
             if (!barcode || barcode.trim() === '') {
                 alert('请输入或扫描有效的条形码。');
+                return;
+            }
+            // 新增：条形码格式校验
+            if (!isValidBarcode(barcode.trim())) {
+                alert('条形码格式有误，请输入8-14位纯数字条形码。\n常见条码为8位、12位或13位数字。');
                 return;
             }
 
