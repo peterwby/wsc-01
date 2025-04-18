@@ -229,10 +229,8 @@ async function startScanning() {
         currentVideoStream = stream;
         video.srcObject = stream;
         
-        // 移动设备镜像显示
-        if (isMobileDevice()) {
-            video.style.transform = 'scaleX(-1)';
-        }
+        // 移除之前的镜像设置
+        video.style.transform = '';
         
         await video.play();
 
@@ -256,7 +254,7 @@ async function startScanning() {
                 barcodeResult.textContent = '扫描出错';
                 productName.textContent = '请重试';
                 rescanButton.disabled = false;
-                scanOverlay.style.display = 'none'; // 发生错误时也隐藏扫描指示区域
+                scanOverlay.style.display = 'none';
             }
         });
 
@@ -274,7 +272,7 @@ async function startScanning() {
         productName.textContent = '摄像头错误';
         barcodeResult.textContent = '错误';
         rescanButton.disabled = false;
-        scanOverlay.style.display = 'none'; // 发生错误时也隐藏扫描指示区域
+        scanOverlay.style.display = 'none';
     }
 }
 
