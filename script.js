@@ -117,15 +117,12 @@ async function getBestVideoConstraints() {
     const isMobile = isMobileDevice();
     
     if (isMobile) {
-        // 移动设备优先使用后置摄像头，设置适中的分辨率
+        // 移动设备优先使用后置摄像头，简化配置
         return {
             facingMode: { exact: "environment" }, // 强制使用后置摄像头
-            width: { min: 640, ideal: 1080, max: 1920 },
+            width: { min: 640, ideal: 1280, max: 1920 },
             height: { min: 480, ideal: 720, max: 1080 },
-            frameRate: { ideal: 30 },
-            focusMode: { ideal: "continuous" }, // 持续自动对焦
-            exposureMode: { ideal: "continuous" }, // 持续自动曝光
-            whiteBalanceMode: { ideal: "continuous" } // 持续自动白平衡
+            frameRate: { ideal: 30 }
         };
     } else {
         // PC设备使用默认配置
@@ -149,7 +146,6 @@ async function getSupportedConstraints(stream) {
 async function configureAutoFocus(stream) {
     const track = stream.getVideoTracks()[0];
     const capabilities = track.getCapabilities();
-    const settings = track.getSettings();
     
     // 检查是否支持自动对焦
     if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
@@ -160,18 +156,6 @@ async function configureAutoFocus(stream) {
             console.log('已启用持续自动对焦');
         } catch (error) {
             console.warn('无法启用自动对焦:', error);
-        }
-    }
-    
-    // 检查是否支持自动曝光
-    if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
-        try {
-            await track.applyConstraints({
-                advanced: [{ exposureMode: 'continuous' }]
-            });
-            console.log('已启用持续自动曝光');
-        } catch (error) {
-            console.warn('无法启用自动曝光:', error);
         }
     }
 }
@@ -197,21 +181,10 @@ async function startScanning() {
         // 配置自动对焦
         await configureAutoFocus(stream);
         
-        // 获取并打印摄像头能力（用于调试）
-        const capabilities = await getSupportedConstraints(stream);
-        
         // 配置视频元素
         currentVideoStream = stream;
         video.srcObject = stream;
         await video.play();
-
-        // 等待视频元数据加载完成
-        await new Promise((resolve) => {
-            video.onloadedmetadata = () => {
-                console.log(`视频分辨率: ${video.videoWidth}x${video.videoHeight}`);
-                resolve();
-            };
-        });
 
         startScanningStatus();
 
@@ -221,7 +194,9 @@ async function startScanning() {
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
             ZXing.BarcodeFormat.EAN_13,
             ZXing.BarcodeFormat.EAN_8,
-            ZXing.BarcodeFormat.CODE_128
+            ZXing.BarcodeFormat.CODE_128,
+            ZXing.BarcodeFormat.UPC_A,
+            ZXing.BarcodeFormat.UPC_E
         ]);
         
         // 使用更短的防抖时间
@@ -314,6 +289,7 @@ async function startScanning() {
             if (!isDecodingActive) return;
 
             if (result) {
+                console.log('成功识别到条形码:', result.text);
                 // 播放成功提示音（仅移动设备）
                 if (isMobileDevice()) {
                     vibrateDevice();
